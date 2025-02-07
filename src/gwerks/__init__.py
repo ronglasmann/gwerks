@@ -2,10 +2,10 @@
 import os
 from datetime import datetime
 
-from .builds import get_version
+# from .builds import get_version
 
 # this is used by the build process as the package version
-__version__ = get_version(__file__)
+# __version__ = get_version(__file__)
 
 
 # --------------------------------------------------------------------------- #

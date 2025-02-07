@@ -23,9 +23,9 @@ dependencies = [
 ]
 
 [project.scripts]
-version_set = "gwc.builds:cli_set_version"
-version_get = "gwc.builds:cli_get_version"
-version_notify = "gwc.builds:cli_notify_version"
+#version_set = "gwc.builds:cli_set_version"
+#version_get = "gwc.builds:cli_get_version"
+#version_notify = "gwc.builds:cli_notify_version"
 
 #make_worker_id = "fwq.cli:make_worker_id"
 #
