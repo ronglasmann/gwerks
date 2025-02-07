@@ -1,11 +1,23 @@
+#[build-system]
+#requires = ["flit_core >=3.2,<4"]
+#build-backend = "flit_core.buildapi"
+
 [build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["setuptools", "versioneer[toml]==0.29"]
+build-backend = "setuptools.build_meta"
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440-pre"
+versionfile_source = "src/gwerks/_version.py"
+versionfile_build = "gwerks/_version.py"
+tag_prefix = ""
+parentdir_prefix = "gwerks-"
 
 [project]
 name = "gwerks"
 authors = [{name = "Ron Glasmann", email = "ron@glasmann.net"}]
-dynamic = ["version", "description"]
+dynamic = ["version"]
 dependencies = [
     'boto3', 'tenacity'
 ]
