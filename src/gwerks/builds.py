@@ -133,12 +133,16 @@ def _get_version_file_path(pkg_dir):
 # --------------------------------------------------------------------------- #
 # returns a build number for dev builds
 def _make_build_number():
+    if "GITHUB_RUN_NUMBER" in os.environ:
+        return os.environ['GITHUB_RUN_NUMBER']
     return f"{int(time())}"
 
 
 # --------------------------------------------------------------------------- #
 # returns a version string: YYYY.MM.<build_number>
 def _make_version_string(build_number=None):
+    if "GITHUB_REF_NAME" in os.environ:
+        return os.environ['GITHUB_REF_NAME']
     if build_number is None:
         build_number = _make_build_number()
     return f'{datetime.now().strftime("%Y.%m")}.{build_number}'

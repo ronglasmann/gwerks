@@ -118,3 +118,6 @@ def fnow_date():
 def fnow_time():
     n = now().strftime(TIME_FORMAT)
     return n
+
+from . import _version
+__version__ = _version.get_versions()['version']
