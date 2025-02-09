@@ -30,10 +30,9 @@ class Package:
 
         # commit and push the version file
         version = self.get_version()
-        execute_cmd(f"git add {self._version_file_path}")
-        # execute_cmd(f"git status")
-        execute_cmd(f"git commit -m 'version {version}' {self._version_file_path}")
-        execute_cmd(f"git push origin {release_branch}")
+        execute_cmd(f"git add {self._version_file_path}", raise_exc=False)
+        execute_cmd(f"git commit -m 'version {version}' {self._version_file_path}", raise_exc=False)
+        execute_cmd(f"git push origin {release_branch}", raise_exc=False)
 
         # create the release
         vcs.release_create(self.get_version())
