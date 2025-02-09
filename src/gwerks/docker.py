@@ -2,7 +2,8 @@ import os
 import socket
 
 import aws
-from . import environment, is_dev_environment, region, profile
+from gwerks import environment, is_dev_environment, region, profile
+from gwerks.commands import execute_cmd, sudo
 
 
 class DockerHost:
@@ -29,7 +30,7 @@ class DockerService:
     @staticmethod
     def start():
         if not DockerService.is_running():
-            execute_cmd(f"service docker start || true")
+            execute_cmd(f"service docker start || true", no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # raise exc if service is not running
@@ -42,7 +43,7 @@ class DockerService:
     # use docker info to see if Docker is running
     @staticmethod
     def is_running():
-        exit_code = execute_cmd(f"docker info", raise_exc=False)
+        exit_code = execute_cmd(f"docker info", raise_exc=False, no_sudo=is_dev_environment())
         return exit_code == 0
 
     # --------------------------------------------------------------------------- #
@@ -54,14 +55,14 @@ class DockerService:
     @staticmethod
     def prune():
         DockerService.ensure_running()
-        execute_cmd(f"docker system prune -f")
+        execute_cmd(f"docker system prune -f", no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # service docker start
     @staticmethod
     def stop():
         if DockerService.is_running():
-            execute_cmd(f"service docker stop || true")
+            execute_cmd(f"service docker stop || true", no_sudo=is_dev_environment())
 
 
 class DockerNetwork:
@@ -88,10 +89,10 @@ class DockerNetwork:
         DockerService.ensure_running()
         if self._driver == DockerNetwork.DRIVER_BRIDGE:
             cmd = f"docker network inspect {self._name} >/dev/null 2>&1 " \
-                  f"|| {sudo()} docker network create --driver {self._driver} {self._name}"
+                  f"|| {sudo(no_sudo=is_dev_environment())} docker network create --driver {self._driver} {self._name}"
         else:
             cmd = f"docker network create --driver {self._driver} "
-        execute_cmd(cmd)
+        execute_cmd(cmd, no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # return the network name
@@ -104,7 +105,7 @@ class DockerNetwork:
         DockerService.ensure_running()
         if self._name is None:
             raise Exception(f"net_name was None when destroying network")
-        execute_cmd(f"docker network rm {self._name} || true")
+        execute_cmd(f"docker network rm {self._name} || true", no_sudo=is_dev_environment())
 
 
 class DockerApp:
@@ -157,7 +158,7 @@ class DockerApp:
     # docker pull
     def pull(self, docker_image_version="latest"):
         DockerService.ensure_running()
-        execute_cmd(f"docker pull {self._full_image_name()}:{docker_image_version}")
+        execute_cmd(f"docker pull {self._full_image_name()}:{docker_image_version}", no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # delegates to run
@@ -206,14 +207,14 @@ class DockerApp:
         cmd += f"{self._app_cmd}"
 
         # print(cmd)
-        execute_cmd(cmd)
+        execute_cmd(cmd, no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # docker stop
     def stop(self):
         DockerService.ensure_running()
-        execute_cmd(f"docker stop {self._app_name} || true")
-        execute_cmd(f"docker wait {self._app_name} || true")
+        execute_cmd(f"docker stop {self._app_name} || true", no_sudo=is_dev_environment())
+        execute_cmd(f"docker wait {self._app_name} || true", no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # delegates to remove
@@ -224,7 +225,7 @@ class DockerApp:
     # docker rm
     def remove(self):
         DockerService.ensure_running()
-        execute_cmd(f"docker rm {self._app_name} || true")
+        execute_cmd(f"docker rm {self._app_name} || true", no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
     # docker login
@@ -235,7 +236,7 @@ class DockerApp:
         cmd = f"aws ecr get-login-password --region {region()} --profile {profile()} "
         cmd += "| "
         cmd += f"docker login --username AWS --password-stdin {ecr_repo} "
-        execute_cmd(cmd)
+        execute_cmd(cmd, no_sudo=is_dev_environment())
         self._ecr_repo = ecr_repo
 
     # --------------------------------------------------------------------------- #
@@ -251,7 +252,7 @@ class DockerApp:
 
         cmd = ""
         cmd += f"tar -C {build_context_path} -czf fwq.tar.gz ."
-        execute_cmd(cmd)
+        execute_cmd(cmd, no_sudo=is_dev_environment())
 
         cmd = ""
         if use_buildkit:
@@ -265,26 +266,8 @@ class DockerApp:
         cmd += f"-t {self._image_name} "
         cmd += f"- < fwq.tar.gz "
         # cmd += ". "
-        execute_cmd(cmd)
+        execute_cmd(cmd, no_sudo=is_dev_environment())
 
         cmd = ""
         cmd += f"rm fwq.tar.gz"
-        execute_cmd(cmd)
-
-
-# --------------------------------------------------------------------------- #
-# execute system command, optionally raise Exceptions on non-zero exit codes
-def execute_cmd(cmd, raise_exc=True):
-    print(f"execute_cmd: {cmd}")
-    exit_code = os.system(f"{sudo()} {cmd}")
-    if raise_exc and exit_code != 0:
-        raise Exception(f"{cmd} failed with exit code {exit_code}")
-    return exit_code
-
-
-# --------------------------------------------------------------------------- #
-# run commands as root outside the Dev environment_name
-def sudo():
-    if is_dev_environment():
-        return ""
-    return "sudo"
+        execute_cmd(cmd, no_sudo=is_dev_environment())

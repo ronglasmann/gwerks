@@ -1,11 +1,14 @@
 """'Lightweight python modules useful in most projects'"""
+import json
 import os
 from datetime import datetime
+import urllib.error
+import urllib.request
+import urllib.parse
 
-# from .builds import get_version
 
-# this is used by the build process as the package version
-# __version__ = get_version(__file__)
+from gwerks.packaging import get_version
+__version__ = get_version(__file__)
 
 
 # --------------------------------------------------------------------------- #
@@ -119,5 +122,48 @@ def fnow_time():
     n = now().strftime(TIME_FORMAT)
     return n
 
-from . import _version
-__version__ = _version.get_versions()['version']
+
+# --------------------------------------------------------------------------- #
+# HTTP requests
+# --------------------------------------------------------------------------- #
+
+def http_post(url, data=None, headers=None):
+
+    if data is None:
+        data = {}
+    if headers is None:
+        headers = {}
+
+    if 'Content-Type' not in headers:
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+
+    print(f"POST: {url} data: {data} headers: {headers}")
+
+    # data_encoded = urllib.parse.urlencode(data).encode('utf-8')
+    req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+
+    try:
+        response_data = urllib.request.urlopen(req).read().decode('utf-8')
+        print(f"SUCCESS: {response_data}")
+        return response_data
+    except urllib.error.HTTPError as e:
+        error_info = e.read().decode('utf-8')
+        print(f"ERROR: {e.code} {e.reason} {error_info}")
+        return error_info
+
+
+def http_get(url, headers=None):
+
+    if headers is None:
+        headers = {}
+
+    print(f"GET: {url} headers: {headers}")
+    req = urllib.request.Request(url, headers=headers, method='GET')
+
+    with urllib.request.urlopen(req) as response:
+        response_data = response.read().decode('utf-8')
+
+    print(f"SUCCESS: {response_data}")
+    return response_data
+
+

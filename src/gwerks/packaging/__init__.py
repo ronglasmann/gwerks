@@ -1,46 +1,65 @@
 import os
 from datetime import datetime
 from time import time
+from gwerks.commands import execute_cmd
 
 
-def _get_version_file_path(pkg_dir):
-    the_version_filename = "version.txt"
-    # the_dir = os.path.dirname(os.path.realpath(pkg_dir))
-    the_dir = os.path.dirname(pkg_dir)
-    if not os.path.exists(the_dir):
-        raise Exception(f"Package not found: {the_dir}")
-    the_v_file = os.path.join(the_dir, the_version_filename)
-    return the_v_file
+def get_version(pkg_root_file_path):
+    pkg = Package(pkg_root_file_path)
+    return pkg.get_version()
 
 
-def _make_sandbox_build_number():
-    return f"0.{int(time())}+SANDBOX"
+class VCS:
+    def __init__(self):
+        pass
+
+    def release_create(self, version):
+        raise Exception('not implemented')
 
 
-def _make_version_string(build_number=None):
-    if build_number is None:
-        build_number = _make_sandbox_build_number()
-    return f'{datetime.now().strftime("%Y.%m")}.{build_number}'
+class Package:
+    VERSION_FILE_NAME = "version.txt"
 
+    def __init__(self, path_to_pkg):
+        the_dir = os.path.dirname(path_to_pkg)
+        if not os.path.exists(the_dir):
+            raise Exception(f"Package not found: {the_dir}")
+        self._version_file_path = os.path.join(the_dir, Package.VERSION_FILE_NAME)
 
-def set_version(pkg_dir, build_number=None):
-    if build_number is None:
-        build_number = _make_sandbox_build_number()
-    the_v_file = _get_version_file_path(pkg_dir)
-    version_string = _make_version_string(build_number)
-    with open(the_v_file, "w") as f:
-        f.write(version_string)
-    # print(f"{pkg_dir}: {version_string}")
-    return version_string
+    def release(self, vcs: VCS, release_branch="main"):
 
+        # commit and push the version file
+        version = self.get_version()
+        execute_cmd(f"git add {self._version_file_path}")
+        # execute_cmd(f"git status")
+        execute_cmd(f"git commit -m 'version {version}' {self._version_file_path}")
+        execute_cmd(f"git push origin {release_branch}")
 
-def get_version(pkg_dir):
-    the_v_file = _get_version_file_path(pkg_dir)
-    if not os.path.exists(the_v_file):
-        # set_version(pkg_dir)
-        version_string = _make_version_string()
-    else:
-        with open(the_v_file, "r") as f:
-            version_string = f.read()
+        # create the release
+        vcs.release_create(self.get_version())
 
-    return version_string
+        # set the next version
+        self._increment_version()
+
+    def get_version(self):
+        if not os.path.exists(self._version_file_path):
+            version_string = self._increment_version_string(None)
+        else:
+            with open(self._version_file_path, "r") as f:
+                version_string = f.read()
+        return version_string
+
+    def _increment_version(self):
+        current_version = self.get_version()
+        new_version = self._increment_version_string(current_version)
+        with open(self._version_file_path, "w") as f:
+            f.write(new_version)
+        return new_version
+
+    def _increment_version_string(self, v_str: str = None):
+        if v_str is None:
+            return f'{datetime.now().strftime("%y.%-m")}.0.{int(time())}'
+        v_parts = v_str.split(".")
+        b_num = int(v_parts[2]) + 1
+        return f'{datetime.now().strftime("%y.%-m")}.{b_num}'
+
