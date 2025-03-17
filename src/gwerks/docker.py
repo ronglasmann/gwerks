@@ -9,7 +9,7 @@ from smart_open import open
 
 import gwerks.aws as aws
 from gwerks import environment, is_dev_environment, region, profile, uid
-from gwerks.util import sudo, exec_cmd
+from gwerks.util.sys import sudo, exec_cmd
 from gwerks.decorators import emitter
 
 
