@@ -9,6 +9,9 @@ def get_version(pkg_root_file_path):
     return pkg.get_version()
 
 
+VCS_GITHUB = "github"
+
+
 class VCS:
     def __init__(self):
         pass
@@ -55,7 +58,8 @@ class Package:
             f.write(new_version)
         return new_version
 
-    def _increment_version_string(self, v_str: str = None):
+    @staticmethod
+    def _increment_version_string(v_str: str = None):
         if v_str is None:
             return f'{datetime.now().strftime("%y.%-m")}.0.{int(time())}'
         v_parts = v_str.split(".")

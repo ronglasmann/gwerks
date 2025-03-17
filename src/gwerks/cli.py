@@ -3,6 +3,8 @@ import signal
 import sys
 from collections import UserDict
 from gwerks.decorators import emitter
+from gwerks.packaging import VCS_GITHUB, Package
+
 
 # --------------------------------------------------------------------------- #
 # Command Line Interface (cli) support
@@ -86,3 +88,55 @@ def _unx_gnu_tpls(opts_map_list: list[dict]) -> tuple[str, list[str], list[tuple
 def _handle_sigterm(*args):
     print(f"Received SIGTERM")
     raise KeyboardInterrupt()
+
+
+# --------------------------------------------------------------------------- #
+# gwerks CLI entry point
+# --------------------------------------------------------------------------- #
+@emitter()
+def gwerks():
+
+    _debug_traceback_limit = 1000
+    sys.tracebacklimit = 0
+
+    try:
+
+        # command line arguments and default values
+        clo = cli([
+            {   # base args
+                "action": Clo.REQUIRED,
+                "debug": None
+            },
+            {   # release
+                "vcs": VCS_GITHUB,
+                "auth_token": Clo.REQUIRED,
+            }
+        ])
+
+        debug = clo.get("debug") == "True"
+        if debug:
+            sys.tracebacklimit = _debug_traceback_limit
+
+        action = clo.get("action")
+
+        print(f"---------------------------------------------------------------------------------")
+
+        globals()[f"action_{action}"](clo)
+
+        print(f"---------------------------------------------------------------------------------")
+
+    except Exception as e:
+        msg = f"ERROR: {e}"
+        print(msg)
+
+    finally:
+        pass
+
+
+def action_release(clo: Clo):
+    vcs = clo.get("vcs")
+    pkg = Package('src/gwerks/')
+    if vcs == VCS_GITHUB:
+        auth_token = clo.get("auth_token")
+        from gwerks.packaging.github import GitHub
+        pkg.release(GitHub(auth_token=auth_token))

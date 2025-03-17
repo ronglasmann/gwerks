@@ -2,10 +2,12 @@ import json
 
 from gwerks import http_post
 from gwerks.util import exec_cmd
+from gwerks.packaging import VCS
 
 
-class GitHub:
+class GitHub(VCS):
     def __init__(self, auth_token):
+        super().__init__()
         self._auth_token = auth_token
         self._remote_origin_url = exec_cmd("git config --get remote.origin.url")
 
