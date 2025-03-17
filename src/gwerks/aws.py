@@ -8,7 +8,9 @@ import boto3
 from botocore.exceptions import ClientError
 from tenacity import stop_after_attempt, wait_fixed, retry_if_exception_type, retry
 
-from . import environment, region, is_live_environment, is_dev_environment, ENV_KEY
+from gwerks import environment, region, is_live_environment, is_dev_environment, ENV_KEY
+
+from gwerks.util import Colors
 
 
 # --------------------------------------------------------------------------- #
@@ -941,10 +943,3 @@ class LinuxInstance(Instance):
             print(f"{self.instance_id} is {Colors.red}not bootstrapped{Colors.end}")
             raise Exception(f"Bootstrap complete file not found on {self.instance_id}")
 
-
-class Colors:
-    # terminal colors
-    red = "\033[0;31m"
-    cyn = "\033[0;36m"
-    grn = "\033[0;32m"
-    end = "\033[0m"

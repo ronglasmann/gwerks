@@ -1,42 +1,19 @@
-#[build-system]
-#requires = ["flit_core >=3.2,<4"]
-#build-backend = "flit_core.buildapi"
-
 [build-system]
-#requires = ["setuptools", "versioneer[toml]==0.29"]
 requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
-
-#[tool.versioneer]
-#VCS = "git"
-#style = "pep440-pre"
-#versionfile_source = "src/gwerks/_version.py"
-#versionfile_build = "gwerks/_version.py"
-#tag_prefix = ""
-#parentdir_prefix = "gwerks-"
 
 [project]
 name = "gwerks"
 authors = [{name = "Ron Glasmann", email = "ron@glasmann.net"}]
 dynamic = ["version"]
 dependencies = [
-    'boto3', 'tenacity'
+    'boto3',
+    'tenacity',
+    'pyyaml',
+    'smart_open[s3]'
 ]
 
 [tool.setuptools.dynamic]
 version = {attr = "gwerks.__version__"}
 
 [project.scripts]
-#version_set = "gwc.builds:cli_set_version"
-#version_get = "gwc.builds:cli_get_version"
-#version_notify = "gwc.builds:cli_notify_version"
-
-#make_worker_id = "fwq.cli:make_worker_id"
-#
-#fwq_run_next = "fwq:fwq_run_next"
-#fwq_kick = "fwq:fwq_kick"
-#fwq_stats = "fwq:fwq_stats"
-#fwq_purge = "fwq:fwq_purge"
-#fwq_peek = "fwq:fwq_peek"
-#fwq_nq = "fwq:fwq_nq"
-#fwq_start_worker = "fwq:fwq_start_worker"

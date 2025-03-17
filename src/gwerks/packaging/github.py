@@ -1,13 +1,13 @@
 import json
 
 from gwerks import http_post
-from gwerks.commands import execute_cmd
+from gwerks.util import exec_cmd
 
 
 class GitHub:
     def __init__(self, auth_token):
         self._auth_token = auth_token
-        self._remote_origin_url = execute_cmd("git config --get remote.origin.url")
+        self._remote_origin_url = exec_cmd("git config --get remote.origin.url")
 
         url_parts = self._remote_origin_url.split("/")
         self._owner = url_parts[3]

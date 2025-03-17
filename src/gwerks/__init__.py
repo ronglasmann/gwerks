@@ -1,10 +1,12 @@
 """'Lightweight python modules useful in most projects'"""
-import json
 import os
 from datetime import datetime
 import urllib.error
 import urllib.request
 import urllib.parse
+
+from gwerks.decorators import emitter
+from gwerks.shortuuid import ShortUUID
 
 
 from gwerks.packaging import get_version
@@ -54,6 +56,7 @@ def change_to_live_environment():
     change_environment(ENV_LIVE)
 
 
+@emitter()
 def change_environment(env):
     if env not in ENV_LIST:
         raise Exception(f"Unsupported environment: {env}")
@@ -127,6 +130,7 @@ def fnow_time():
 # HTTP requests
 # --------------------------------------------------------------------------- #
 
+@emitter()
 def http_post(url, data=None, headers=None):
 
     if data is None:
@@ -137,7 +141,7 @@ def http_post(url, data=None, headers=None):
     if 'Content-Type' not in headers:
         headers['Content-Type'] = 'application/x-www-form-urlencoded'
 
-    print(f"POST: {url} data: {data} headers: {headers}")
+    print(f"{url} data: {data} headers: {headers}")
 
     # data_encoded = urllib.parse.urlencode(data).encode('utf-8')
     req = urllib.request.Request(url, data=data, headers=headers, method='POST')
@@ -152,12 +156,13 @@ def http_post(url, data=None, headers=None):
         return error_info
 
 
+@emitter()
 def http_get(url, headers=None):
 
     if headers is None:
         headers = {}
 
-    print(f"GET: {url} headers: {headers}")
+    print(f"{url} headers: {headers}")
     req = urllib.request.Request(url, headers=headers, method='GET')
 
     with urllib.request.urlopen(req) as response:
@@ -167,3 +172,6 @@ def http_get(url, headers=None):
     return response_data
 
 
+def uid(namespace=None, length=None):
+    the_uid = ShortUUID().uuid(namespace, length)
+    return the_uid

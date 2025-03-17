@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from time import time
-from gwerks.commands import execute_cmd
+from gwerks.util import exec_cmd
 
 
 def get_version(pkg_root_file_path):
@@ -30,9 +30,9 @@ class Package:
 
         # commit and push the version file
         version = self.get_version()
-        execute_cmd(f"git add {self._version_file_path}", raise_exc=False)
-        execute_cmd(f"git commit -m 'version {version}' {self._version_file_path}", raise_exc=False)
-        execute_cmd(f"git push origin {release_branch}", raise_exc=False)
+        exec_cmd(f"git add {self._version_file_path}", raise_exc=False)
+        exec_cmd(f"git commit -m 'version {version}' {self._version_file_path}", raise_exc=False)
+        exec_cmd(f"git push origin {release_branch}", raise_exc=False)
 
         # create the release
         vcs.release_create(self.get_version())
