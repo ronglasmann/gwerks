@@ -108,6 +108,7 @@ def gwerks():
                 "debug": None
             },
             {   # release
+                "pkg": Clo.REQUIRED,
                 "vcs": VCS_GITHUB,
                 "auth_token": Clo.REQUIRED,
             }
@@ -135,7 +136,8 @@ def gwerks():
 
 def action_release(clo: Clo):
     vcs = clo.get("vcs")
-    pkg = Package('src/gwerks/')
+    pkg_fp = clo.get("pkg")
+    pkg = Package(pkg_fp)
     if vcs == VCS_GITHUB:
         auth_token = clo.get("auth_token")
         from gwerks.packaging.github import GitHub
