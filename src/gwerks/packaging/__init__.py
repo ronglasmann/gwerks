@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from time import time
-from gwerks.util import exec_cmd
+from gwerks.util.sys import exec_cmd
 
 
 def get_version(pkg_root_file_path):
