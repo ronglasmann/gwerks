@@ -17,3 +17,4 @@ dependencies = [
 version = {attr = "gwerks.__version__"}
 
 [project.scripts]
+gwerks = "gwerks.cli:gwerks"

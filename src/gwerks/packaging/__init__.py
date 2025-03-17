@@ -9,6 +9,9 @@ def get_version(pkg_root_file_path):
     return pkg.get_version()
 
 
+VCS_GITHUB = "github"
+
+
 class VCS:
     def __init__(self):
         pass
