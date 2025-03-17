@@ -18,7 +18,7 @@ def exec_cmd(cmd, raise_exc=True, no_sudo=True, send_to_stdin=None):
     cmd = f"{sudo(no_sudo)} {cmd}".strip()
     print(cmd)
 
-    # Execute the 'ls -l' command and capture the output
+    # Execute command and capture the output
     result = subprocess.run(cmd, capture_output=True, text=True, shell=True, input=send_to_stdin)
 
     exit_code = result.returncode
@@ -30,14 +30,15 @@ def exec_cmd(cmd, raise_exc=True, no_sudo=True, send_to_stdin=None):
         raise Exception(error_msg)
 
     # Print the standard output and return code
-    # result_msg = f"[{result.returncode}] <- {cmd}"
-    # if result.stdout:
-    #     result_msg += f" {result.stdout}"
+    result_msg = f"[{result.returncode}] <- {cmd}"
+    if result.stdout:
+        result_msg += f" {result.stdout}"
 
     # Print the standard error, if any
-    # if result.stderr:
-    #     result_msg += f" {result.stderr}"
+    if result.stderr:
+        result_msg += f" {result.stderr}"
 
     # Print the return code
-    # print(result_msg)
-    return result
+    print(result_msg)
+
+    return result.stdout
