@@ -1,7 +1,7 @@
 import json
 
 from gwerks import http_post
-from gwerks.util import exec_cmd
+from gwerks.util.sys import exec_cmd
 from gwerks.packaging import VCS
 
 
