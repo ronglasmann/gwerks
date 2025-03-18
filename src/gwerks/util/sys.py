@@ -14,7 +14,7 @@ def sudo(no_sudo=True):
 # --------------------------------------------------------------------------- #
 # execute system commands, optionally raise Exceptions on non-zero exit codes
 @emitter()
-def exec_cmd(cmd, raise_exc=True, no_sudo=True, send_to_stdin=None):
+def exec_cmd(cmd, raise_exc=True, no_sudo=True, send_to_stdin=None, return_tuple=False):
     cmd = f"{sudo(no_sudo)} {cmd}".strip()
     print(cmd)
 
@@ -41,4 +41,7 @@ def exec_cmd(cmd, raise_exc=True, no_sudo=True, send_to_stdin=None):
     # Print the return code
     print(result_msg)
 
-    return result.stdout
+    if return_tuple:
+        return result.stdout, result.returncode
+    else:
+        return result.stdout

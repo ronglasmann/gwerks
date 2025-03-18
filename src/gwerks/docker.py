@@ -54,8 +54,8 @@ class DockerService:
     # use docker info to see if Docker is running
     @staticmethod
     def is_running():
-        result = exec_cmd(f"docker ps", raise_exc=False, no_sudo=is_dev_environment())
-        exit_code = result.returncode
+        result, exit_code = exec_cmd(f"docker ps", raise_exc=False, no_sudo=is_dev_environment(), return_tuple=True)
+        # exit_code = result.returncode
         return exit_code == 0
 
     # --------------------------------------------------------------------------- #
