@@ -271,8 +271,8 @@ class DockerContext:
         elif from_yaml_str:
             self._config = yaml.safe_load(StringIO(from_yaml_str))
 
-        if "files" not in self._config.keys():
-            self._config["files"] = ["."]
+        # if "files" not in self._config.keys():
+        #     self._config["files"] = ["."]
 
         if "use_buildkit" not in self._config.keys():
             self._config["use_buildkit"] = "True"
