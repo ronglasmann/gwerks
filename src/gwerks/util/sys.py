@@ -1,6 +1,7 @@
 import subprocess
 
 from gwerks import emitter
+from gwerks.util import Colors
 
 
 # --------------------------------------------------------------------------- #
@@ -26,17 +27,17 @@ def exec_cmd(cmd, raise_exc=True, no_sudo=True, send_to_stdin=None, return_tuple
         error_msg = f"ERROR: [{exit_code}]"
         if result.stderr:
             error_msg += f" {result.stderr}"
-        print(error_msg)
+        print(f"{Colors.red}error_msg{Colors.end}")
         raise Exception(error_msg)
 
     # Print the standard output and return code
-    result_msg = f"[{result.returncode}] <- {cmd}"
+    result_msg = f"[{result.returncode}]"
     if result.stdout:
         result_msg += f" {result.stdout}"
 
     # Print the standard error, if any
     if result.stderr:
-        result_msg += f" {result.stderr}"
+        result_msg += f" {Colors.red}ERROR: {result.stderr}{Colors.end}"
 
     # Print the return code
     print(result_msg)
