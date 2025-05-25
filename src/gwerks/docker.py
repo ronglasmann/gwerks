@@ -2,36 +2,14 @@ import os
 import socket
 import shutil
 import tempfile
-from io import StringIO
+from typing import Optional
 
-import yaml
 from smart_open import open
 
-import gwerks.aws as aws
-from gwerks import environment, is_dev_environment, region, profile, uid
-from gwerks.util.sys import sudo, exec_cmd
-from gwerks.decorators import emitter
-
-
-# TODO implement DockerHost to enable management of servers capable of hosting Docker containers on various platforms
-# TODO implement docker repos other than ECR
-
-
-class DockerHost:
-    def __init__(self):
-        pass
-
-    def launch(self):
-        pass
-
-    def start(self):
-        pass
-
-    def stop(self):
-        pass
-
-    def terminate(self):
-        pass
+from . import aws
+from . import environment, is_dev_environment, region, profile, uid
+from .util.sys import sudo, exec_cmd
+from .decorators import emitter
 
 
 class DockerService:
@@ -46,7 +24,7 @@ class DockerService:
     # --------------------------------------------------------------------------- #
     # raise exc if service is not running
     @staticmethod
-    def ensure_running():
+    def assert_is_running():
         if not DockerService.is_running():
             raise Exception(f"Docker service is not running")
 
@@ -66,7 +44,7 @@ class DockerService:
     #          all build cache
     @staticmethod
     def prune():
-        DockerService.ensure_running()
+        DockerService.assert_is_running()
         exec_cmd(f"docker system prune -f", no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
@@ -90,21 +68,33 @@ class DockerNetwork:
 
     def __init__(self, name, driver=DEFAULT_DRIVER):
         self._name = name
-        self._driver = driver
+        self._driver = None
+        self.set_driver(driver)
 
-        if self._driver not in DockerNetwork.DRIVERS:
-            raise Exception(f"driver must be one of {DockerNetwork.DRIVERS}, not '{self._driver}'")
+    # --------------------------------------------------------------------------- #
+    # return the network name
+    def get_name(self):
+        return self._name
 
-        if self._driver in [DockerNetwork.DRIVER_BRIDGE, DockerNetwork.DRIVER_OVERLAY]:
+    # return the network driver
+    def get_driver(self):
+        return self._driver
+
+    # set the network driver
+    def set_driver(self, driver):
+        if driver not in DockerNetwork.DRIVERS:
+            raise Exception(f"driver must be one of {DockerNetwork.DRIVERS}, not '{driver}'")
+
+        if driver in [DockerNetwork.DRIVER_BRIDGE, DockerNetwork.DRIVER_OVERLAY]:
             if self._name is None:
-                raise Exception(f"DockerNetwork.name must be specified when creating {self._driver} network")
+                raise Exception(f"DockerNetwork.name must be specified when creating {driver} network")
 
-        self._create()
+        self._driver = driver
 
     # --------------------------------------------------------------------------- #
     # docker network create
-    def _create(self):
-        DockerService.ensure_running()
+    def create(self):
+        DockerService.assert_is_running()
         if self._driver == DockerNetwork.DRIVER_BRIDGE:
             cmd = f"docker network inspect {self._name} >/dev/null 2>&1 " \
                   f"|| {sudo(no_sudo=is_dev_environment())} docker network create --driver {self._driver} {self._name}"
@@ -113,234 +103,215 @@ class DockerNetwork:
         exec_cmd(cmd, no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
-    # return the network name
-    def get_name(self):
-        return self._name
-
-    # --------------------------------------------------------------------------- #
     # docker network rm
     def destroy(self):
-        DockerService.ensure_running()
+        DockerService.assert_is_running()
         if self._name is None:
             raise Exception(f"net_name was None when destroying network")
         exec_cmd(f"docker network rm {self._name} || true", no_sudo=is_dev_environment())
 
 
-class DockerApp:
+class DockerBase:
+    def __init__(self, config):
 
-    # @emitter(mod_name="DockerApp")
-    def __init__(self, app_name, image_name):
-        self._app_name = app_name
-        print(f"app_name: {app_name}")
-        self._image_name = image_name
-        print(f"image_name: {image_name}")
+        self._network: Optional[DockerNetwork] = None
+        self._sys_name: Optional[str] = None
+        self._host_name: Optional[str] = None
+        self._name = self.__class__.__name__
 
-        self._host_name = socket.gethostname()
-        # print(f"host_name: {self._host_name}")
-        self._host_ip = socket.gethostbyname(self._host_name)
-        # print(f"host_ip: {self._host_ip}")
+        if "port" not in config:
+            raise Exception("port is required")
+        self._port = config["port"]
 
-        self._ecr_repo = None
+        if "image_name" not in config:
+            raise Exception("image_name is required")
+        self._image_name = config["image_name"]
 
-    def get_app_name(self):
-        return self._app_name
+        self._run_as = (os.getuid(), os.getgid())
+        if "run_as" in config:
+            self._run_as = config["run_as"]
 
-    def get_image_name(self):
-        return self._image_name
+        self._mem_max = None
+        if "mem_max" in config:
+            self._mem_max = config["mem_max"]
 
-    def get_host_name(self):
-        return self._host_name
+        self._mem_res = None
+        if "mem_res" in config:
+            self._mem_res = config["mem_res"]
 
-    def get_host_addr(self):
-        return self._host_ip
+        self._swap_max = None
+        if "swap_max" in config:
+            self._swap_max = config["swap_max"]
 
-    # @emitter(mod_name="DockerApp")
-    def _full_image_name(self):
-        if not self._image_name:
-            raise Exception(f"image is None")
-        docker_image = self._image_name
-        if self._ecr_repo is not None:
-            docker_image = f"{self._ecr_repo}/{self._image_name}"
-        print(f"full_image_name: {docker_image}")
-        return docker_image
+        self._published_ports = []
+        if "published_ports" in config:
+            self._published_ports = config["published_ports"]
+        self._published_ports.append(self.get_port())
 
-    # --------------------------------------------------------------------------- #
-    # docker pull
-    # @emitter(mod_name="DockerApp")
-    def pull(self, docker_image_version="latest"):
-        DockerService.ensure_running()
-        exec_cmd(f"docker pull {self._full_image_name()}:{docker_image_version}", no_sudo=is_dev_environment())
+        self._volume_mappings = []
+        if "volume_mappings" in config:
+            self._volume_mappings = config["volume_mappings"]
 
-    # --------------------------------------------------------------------------- #
-    # docker run
-    # @emitter(mod_name="DockerApp")
-    def run(self, app_cmd: str, network: DockerNetwork = None, port_mappings: list[tuple] = None,
-            volume_mappings: list[tuple] = None, log_group_prefix: str = "/"):
-        DockerService.ensure_running()
+        # docker build settings
 
-        cmd = f"docker run --name {self._app_name} --env APP_NAME={self._app_name} "
-        cmd += f"--env RUNTIME_ENV={environment()} --env PYTHONUNBUFFERED=1 "
+        self._use_buildkit = True
+        if "docker_use_buildkit" in config:
+            self._use_buildkit = config["docker_use_buildkit"]
 
-        if network is not None:
-            cmd += f"--network {network.get_name()} "
+        self._docker_app_files = []
+        if 'docker_app_files' in config:
+            self._docker_app_files = config['docker_app_files']
 
-        # expose ports
-        if port_mappings and len(port_mappings) > 0:
-            for pm in port_mappings:
-                host_port = pm[0]
-                cont_port = pm[1]
-                cmd += f"-p {host_port}:{cont_port} "
+        if 'dockerfile_str' in config:
+            self._dockerfile_str = config['dockerfile_str']
 
-        # map volumes
-        if volume_mappings and len(volume_mappings) > 0:
-            for vm in volume_mappings:
-                host_vol = vm[0]
-                cont_vol = vm[1]
-                cmd += f"-v {host_vol}:{cont_vol} "
+        if 'dockerfile_file' in config:
+            self._dockerfile_file = config['dockerfile_file']
 
-        # use the aws log driver in Test and Live so the logs go to Cloudwatch
-        if not is_dev_environment():
-            # if not log_group_base:
-            #     raise Exception(f"Unspecified log_group_base for the {environment_name()} environment_name")
-            log_group = log_group_prefix
-            log_group += f"/{environment()}/{self._host_name}"
-            if not log_group.startswith("/"):
-                log_group = "/" + log_group
-            if log_group.endswith("/"):
-                log_group = log_group[:-1]
-
-            cmd += f"--log-driver=awslogs "
-            cmd += f"--log-opt awslogs-group={log_group} --log-opt awslogs-create-group=true "
-            cmd += f"--log-opt awslogs-stream={self._app_name} "
-
-        # in the Dev environment_name expect AWS keys must be set in the system environment_name
-        if is_dev_environment():
-            cmd += f"--env AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID "
-            cmd += f"--env AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY "
-
-        cmd += f"-d -i {self._full_image_name()} "
-        cmd += f"{app_cmd}"
-
-        # print(cmd)
-        exec_cmd(cmd, no_sudo=is_dev_environment())
-
-        print(f"Running!")
-
-    # --------------------------------------------------------------------------- #
-    # docker stop
-    # @emitter(mod_name="DockerApp")
-    def stop(self):
-        DockerService.ensure_running()
-        exec_cmd(f"docker stop {self._app_name} || true", no_sudo=is_dev_environment())
-        exec_cmd(f"docker wait {self._app_name} || true", no_sudo=is_dev_environment())
-
-    # --------------------------------------------------------------------------- #
-    # docker rm
-    # @emitter(mod_name="DockerApp")
-    def remove(self):
-        DockerService.ensure_running()
-        exec_cmd(f"docker rm {self._app_name} || true", no_sudo=is_dev_environment())
-
-    # --------------------------------------------------------------------------- #
-    # docker login
-    def set_ecr_repo(self, ecr_repo):
-        DockerService.ensure_running()
-        if ecr_repo is None:
-            raise Exception(f"ecr_repo must be specified")
-        cmd = f"aws ecr get-login-password --region {region()} --profile {profile()} "
-        cmd += "| "
-        cmd += f"docker login --username AWS --password-stdin {ecr_repo} "
-        exec_cmd(cmd, no_sudo=is_dev_environment())
-        self._ecr_repo = ecr_repo
-
-
-@emitter()
-class DockerContext:
-    def __init__(self, config: dict = None, from_yaml_file: str = None, from_yaml_str: str = None, ):
-
-        self._config = config
-        if not self._config:
-            self._config = {}
-
-        # open the yaml and parse it
-        if from_yaml_file:
-            print(f"loading yaml file {from_yaml_file}")
-            with open(from_yaml_file, 'r') as f:
-                self._config = yaml.safe_load(f)
-
-        elif from_yaml_str:
-            self._config = yaml.safe_load(StringIO(from_yaml_str))
-
-        # if "files" not in self._config.keys():
-        #     self._config["files"] = ["."]
-
-        if "use_buildkit" not in self._config.keys():
-            self._config["use_buildkit"] = "True"
+        self._docker_app_cloud_creds_pass_through = None
+        if "docker_app_cloud_creds_pass_through" in config:
+            self._docker_app_cloud_creds_pass_through = config["docker_app_cloud_creds_pass_through"]
 
         the_build_context = uid("docker_build_context")
         self._tar_file_name = f"{the_build_context}.tar.gz"
         self._build_context_fp = f"{tempfile.gettempdir()}/{the_build_context}"
 
-        # self._build()
+    def start(self):
+        raise Exception("start() is not implemented")
 
-    def to_yaml_file(self, yaml_file_path: str):
-        with open(yaml_file_path, 'w') as f:
-            yaml.dump(self._config, f, sort_keys=False)
+    def stop(self):
+        raise Exception("stop() is not implemented")
 
-    def set(self, key, value):
-        self._config[key] = value
+    def get_sys_name(self):
+        if not self._sys_name:
+            raise Exception("sys_name is not set")
+        return self._sys_name
+    def set_sys_name(self, sys_name):
+        self._sys_name = sys_name
+
+    def get_host_name(self):
+        if not self._host_name:
+            raise Exception("host_name is not set")
+        return self._host_name
+    def set_host_name(self, host_name):
+        self._host_name = host_name
+
+    def get_name(self):
+        return self._name
+
+    def get_port(self):
+        return self._port
+
+    def get_docker_container_name(self):
+        return f"{self.get_sys_name()}-{self.get_name()}_{self.get_port()}"
+
+    def set_docker_network(self, network):
+        self._network = network
+
+    def get_docker_network(self):
+        return self._network
 
     @emitter()
-    def build(self, image_name, no_cache=False):
+    def docker_build(self, image_name, no_cache=False):
 
-        self._create()
-        DockerService.ensure_running()
-
-        try:
-            cmd = ""
-            if self._config.get("use_buildkit") == "True":
-                cmd += f"DOCKER_BUILDKIT=1 "
-            cmd += f"docker build "
-            if no_cache:
-                cmd += "--no-cache "
-            if self._config.get("pass_through_cloud_creds") == "aws":
-                access_key, secret_key = aws.get_credentials()
-                cmd += f"--build-arg AWS_ACCESS_KEY_ID={access_key} "
-                cmd += f"--build-arg AWS_SECRET_ACCESS_KEY={secret_key} "
-            cmd += f"-t {image_name} "
-            cmd += f"- < {self._tar_file_name } "
-            exec_cmd(cmd, no_sudo=is_dev_environment())
-
-        finally:
-            self._destroy()
-
-    def _create(self):
         if not os.path.exists(self._build_context_fp):
             print(f"makedirs: {self._build_context_fp}")
             os.makedirs(self._build_context_fp)
 
-        if 'files' in self._config.keys():
-            for file in self._config["files"]:
-                self._copy_from(file)
+        for file in self._docker_app_files:
+            self._copy_from(file)
 
-        if 'dockerfile_str' in self._config.keys():
-            self._write_dockerfile()
-        elif 'dockerfile_file' in self._config.keys():
-            if not self._copy_from(self._config['dockerfile_file']):
-                raise Exception(f"copying {self._config['dockerfile_file']} failed")
+        if self._dockerfile_str:
+            the_dockerfile = f"{self._build_context_fp}/Dockerfile"
+            print(f"write: {the_dockerfile}")
+            with open(the_dockerfile, 'w') as f:
+                f.write(self._dockerfile_str)
+        elif self._dockerfile_file:
+            if not self._copy_from(self._dockerfile_file):
+                raise Exception(f"copying {self._dockerfile_file} failed")
         else:
             raise Exception(f"either 'dockerfile_str' or 'dockerfile_file' must be specified")
 
         cmd = ""
         cmd += f"tar -C {self._build_context_fp} -czf {self._tar_file_name} ."
-        exec_cmd(cmd, no_sudo=is_dev_environment())
+        self._exec(cmd)
 
-    # @emitter()
-    def _write_dockerfile(self):
-        the_dockerfile = f"{self._build_context_fp}/Dockerfile"
-        print(f"write: {the_dockerfile}")
-        with open(the_dockerfile, 'w') as f:
-            f.write(self._config['dockerfile_str'])
+        DockerService.assert_is_running()
+
+        try:
+            cmd = ""
+            if self._use_buildkit:
+                cmd += f"DOCKER_BUILDKIT=1 "
+            cmd += f"docker build "
+            if no_cache:
+                cmd += "--no-cache "
+            if self._docker_app_cloud_creds_pass_through == "aws":
+                access_key, secret_key = aws.get_credentials()
+                cmd += f"--build-arg AWS_ACCESS_KEY_ID={access_key} "
+                cmd += f"--build-arg AWS_SECRET_ACCESS_KEY={secret_key} "
+            cmd += f"-t {image_name} "
+            cmd += f"- < {self._tar_file_name } "
+            self._exec(cmd)
+
+        finally:
+            cmd = ""
+            cmd += f"rm {self._tar_file_name} && rm -rf {self._build_context_fp}"
+            self._exec(cmd)
+
+    def docker_run(self, cmd_line=None, env_vars=None):
+        cmd = ""
+        cmd += f"docker run -d --name {self.get_docker_container_name()} "
+        cmd += f"--env RUNTIME_ENV={environment()} "
+        cmd += f"--env PYTHONUNBUFFERED=1 "
+        if env_vars:
+            cmd += f"{env_vars} "
+        cmd += self._docker_run_env_dev_aws_keys()
+        if self._network:
+            cmd += f"--network {self._network.get_name()} "
+        for p in self._published_ports:
+            cmd += f"--publish {p}:{p} "
+        for v_map in self._volume_mappings:
+            os.makedirs(v_map[0], exist_ok=True)
+            cmd += f"--volume {v_map[0]}:{v_map[1]} "
+        cmd += self._docker_run_log_driver()
+        cmd += f"--user {self._run_as[0]}:{self._run_as[1]} "
+        if self._mem_max:
+            cmd += f"--oom-kill-disable --memory={self._mem_max} "
+        if self._mem_res:
+            cmd += f"--memory-reservation={self._mem_res} "
+        if self._swap_max:
+            cmd += f"--memory-swap={self._swap_max} "
+        cmd += f"{self._image_name} "
+        if cmd_line:
+            cmd += f"{cmd_line} "
+        return self._exec(cmd)
+
+    def docker_stop(self):
+        cmd = ""
+        cmd += f"docker rm --force {self.get_docker_container_name()} "
+        return self._exec(cmd)
+
+    def _docker_run_log_driver(self):
+        cmd = ""
+        # use the aws log driver in Test and Live so the logs go to Cloudwatch
+        if not is_dev_environment():
+            log_group = f"{self.get_sys_name()}/{environment()}/{self.get_host_name()}"
+            if not log_group.startswith("/"):
+                log_group = "/" + log_group
+            if log_group.endswith("/"):
+                log_group = log_group[:-1]
+            cmd += f"--log-driver=awslogs "
+            cmd += f"--log-opt awslogs-group={log_group} --log-opt awslogs-create-group=true "
+            cmd += f"--log-opt awslogs-stream={self.get_docker_container_name()} "
+        return cmd
+
+    def _docker_run_env_dev_aws_keys(self):
+        cmd = ""
+        # in the Dev environment_name expect AWS keys must be set in the system environment_name
+        if is_dev_environment():
+            cmd += f"--env AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID "
+            cmd += f"--env AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY "
+        return cmd
 
     # @emitter()
     def _copy_from(self, copy_src):
@@ -369,8 +340,50 @@ class DockerContext:
 
         return True
 
-    # @emitter()
-    def _destroy(self):
-        cmd = ""
-        cmd += f"rm {self._tar_file_name} && rm -rf {self._build_context_fp}"
-        exec_cmd(cmd, no_sudo=is_dev_environment())
+    def _exec(self, cmd):
+        return exec_cmd(cmd, no_sudo=is_dev_environment(), return_tuple=True)
+
+
+class DockerSystem:
+    def __init__(self, name: str, apps: list[DockerBase] = None ):
+        self._name = name
+        self._network = DockerNetwork(f"{name}-net", DockerNetwork.DEFAULT_DRIVER)
+        self._apps = []
+        if apps is None:
+            apps = []
+
+        # host connectivity
+        self._host_name = socket.gethostname()
+        self._host_ip = socket.gethostbyname(self._host_name)
+
+        for app in apps:
+            self.add_app(app)
+
+    def set_network_driver(self, driver):
+        self._network.set_driver(driver)
+
+    def add_app(self, app: DockerBase):
+        app.set_sys_name(self._name)
+        app.set_host_name(self._host_name)
+        app.set_docker_network(self._network)
+        self._apps.append(app)
+
+    def start(self):
+        self._network.create()
+        nfo = {
+            "name": self._name,
+            "host": {
+                "name": self._host_name,
+                "ip": self._host_ip
+            }
+        }
+        for app in self._apps:
+            app.start()
+            nfo[app.get_name()] = app.get_port()
+        return nfo
+
+    def stop(self):
+        for app in self._apps:
+            app.stop()
+        self._network.destroy()
+
