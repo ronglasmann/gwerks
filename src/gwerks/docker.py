@@ -95,11 +95,15 @@ class DockerNetwork:
     # docker network create
     def create(self):
         DockerService.assert_is_running()
-        if self._driver == DockerNetwork.DRIVER_BRIDGE:
-            cmd = f"docker network inspect {self._name} >/dev/null 2>&1 " \
-                  f"|| {sudo(no_sudo=is_dev_environment())} docker network create --driver {self._driver} {self._name}"
-        else:
-            cmd = f"docker network create --driver {self._driver} "
+        # cmd = f"{sudo(no_sudo=is_dev_environment())} docker network create --driver {self._driver} {self._name}"
+        cmd = (f"{sudo(no_sudo=is_dev_environment())} docker network inspect {self._name} "
+               f"|| "
+               f"{sudo(no_sudo=is_dev_environment())} docker network create --driver {self._driver} {self._name} ")
+        # if self._driver == DockerNetwork.DRIVER_BRIDGE:
+        #     cmd = f"docker network inspect {self._name} >/dev/null 2>&1 " \
+        #           f"|| {sudo(no_sudo=is_dev_environment())} docker network create --driver {self._driver} {self._name}"
+        # else:
+        #     cmd = f"docker network create --driver {self._driver} "
         exec_cmd(cmd, no_sudo=is_dev_environment())
 
     # --------------------------------------------------------------------------- #
@@ -127,7 +131,10 @@ class DockerBase:
             raise Exception("image_name is required")
         self._image_name = config["image_name"]
 
-        self._run_as = (os.getuid(), os.getgid())
+        if os.name == 'nt':
+            self._run_as = f"{os.getlogin()}"
+        else:
+            self._run_as = f"{os.getuid()}:{os.getgid()}"
         if "run_as" in config:
             self._run_as = config["run_as"]
 
@@ -259,6 +266,8 @@ class DockerBase:
             self._exec(cmd)
 
     def docker_run(self, cmd_line=None, env_vars=None):
+        self.docker_stop()
+
         cmd = ""
         cmd += f"docker run -d --name {self.get_docker_container_name()} "
         cmd += f"--env RUNTIME_ENV={environment()} "
@@ -271,10 +280,11 @@ class DockerBase:
         for p in self._published_ports:
             cmd += f"--publish {p}:{p} "
         for v_map in self._volume_mappings:
+            print(f"os.makedirs({v_map[0]}, exist_ok=True)")
             os.makedirs(v_map[0], exist_ok=True)
             cmd += f"--volume {v_map[0]}:{v_map[1]} "
         cmd += self._docker_run_log_driver()
-        cmd += f"--user {self._run_as[0]}:{self._run_as[1]} "
+        # cmd += f"--user {self._run_as} "
         if self._mem_max:
             cmd += f"--oom-kill-disable --memory={self._mem_max} "
         if self._mem_res:
@@ -288,7 +298,10 @@ class DockerBase:
 
     def docker_stop(self):
         cmd = ""
-        cmd += f"docker rm --force {self.get_docker_container_name()} "
+        cmd += (f'docker ps -a -q --filter "name={self.get_docker_container_name()}" '
+                f'&& '
+                f'docker rm -f {self.get_docker_container_name()} ')
+        # cmd += f"docker rm --force {self.get_docker_container_name()} "
         return self._exec(cmd)
 
     def _docker_run_log_driver(self):
